@@ -1,0 +1,26 @@
+{
+    "name": "gungi",
+    "productName": "Gungi",
+    "version": "0.0.1",
+    "description": "Gungi application",
+    "author": "Ford Peprah <ford.peprah@uwaterloo.ca>",
+    "license": "MIT",
+    "main": "gungi/app.js",
+    "private": true,
+    "scripts": {
+        "start": "EVENT_NOKQUEUE=1 node_modules/.bin/electron gungi/app.js",
+        "clean": "rm -rf build",
+        "build": "rm -rf build && node_modules/electron-packager/cli.js . --prune --all --icon=resources/icon.icns --out=build",
+        "build:mac": "rm -rf build && node_modules/electron-packager/cli.js . --prune --platform=darwin --icon=resources/icon.icns --out=build"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/hkpeprah/node-gungi.git"
+    },
+    "dependencies": {
+        "electron": "1.4.15"
+    },
+    "devDependencies": {
+        "electron-packager": "8.5.1"
+    }
+}
