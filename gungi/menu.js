@@ -1,8 +1,6 @@
 // Copyright (C) 2017 Ford Peprah
-const electron = require('electron');
 
-const app = electron.app;
-const Menu = electron.Menu;
+const {Menu, app, shell} = require('electron');
 
 const template = [
     {
@@ -82,8 +80,8 @@ const template = [
         submenu: [
             {
                 label: 'Github',
-                click: function() {
-                    return electron.shell.openExternal('http://github.com/hkpeprah/node-gungi');
+                click: () => {
+                    return shell.openExternal('http://github.com/hkpeprah/node-gungi');
                 }
             }
         ]
@@ -177,7 +175,7 @@ if (process.platform === 'darwin') {
  */
 function bind(app) {
     const menu = Menu.buildFromTemplate(template);
-    return app.setApplicationMenu(menu);
+    return Menu.setApplicationMenu(menu);
 }
 
 exports.bind = bind;

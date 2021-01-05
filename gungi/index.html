@@ -7,8 +7,18 @@
     <meta name='description' content='Gungi application' />
     <meta name='keywords' content='Gungi, Hunter X Hunter' />
     <meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no' />
+    <meta http-equiv='Content-Security-Policy' content="script-src 'self';" />
+    <!-- Stylesheets -->
+    <link rel='stylesheet' type='text/css' href='static/stylesheets/gungi.css' />
+    <!-- JavaScript -->
+    <script type='text/javascript' src='static/js/react.production.min.js'></script>
+    <script type='text/javascript' src='static/js/react-dom.production.min.js'></script>
+    <script type='text/javascript' src='static/js/app.js'></script>
   </head>
   <body>
-    <h1>Hello World!</h1>
+    <div class='container'>
+      <div id='app-container' class='app-container'></div>
+      </div>
+    </div>
   </body>
 </html>

@@ -1,10 +1,11 @@
 // Copyright (C) 2017 Ford Peprah
-const electron = require('electron');
-const path = require('path');
-const menu = require('./menu');
 
-const BrowserWindow = electron.BrowserWindow;
-const app = electron.app;
+const {BrowserWindow, app} = require('electron');
+
+const api = require('./api');
+const getPort = require('get-port');
+const menu = require('./menu');
+const path = require('path');
 
 var mainWindow = null;
 
@@ -15,7 +16,9 @@ var mainWindow = null;
  */
 function unready() {
     mainWindow = null;
-    return app.quit();
+    app.quit();
+    api.server.close();
+    return null;
 }
 
 /**
@@ -31,11 +34,11 @@ function ready() {
 
         // Initial width and height of the window.
         width: 1280,
-        height: 720,
+        height: 768,
 
         // Minimum dimensions of the window.
         minWidth: 1280,
-        minHeight: 720,
+        minHeight: 768,
 
         // Title-bar style only applies to Mac.  Sets the buttons to be inset
         // into the window page.
@@ -50,7 +53,7 @@ function ready() {
             // Enable web GL to allow building 3D applications.
             webgl: true,
             // Disable web security in order to load local resources.
-            webSecurity: false
+            webSecurity: true
         },
 
         // Set the background colour of the window.
@@ -65,7 +68,7 @@ function ready() {
      *
      * @returns {undefined}
      */
-    window.on('ready-to-show', function() {
+    window.on('ready-to-show', () => {
         window.show();
     });
 
@@ -74,14 +77,31 @@ function ready() {
      *
      * @returns {undefined}
      */
-    window.on('error', function() {
+    window.on('error', () => {
         app.quit();
+        api.server.close();
     });
 
-    window.loadURL('file://' + __dirname + '/index.html');
-    menu.bind(app);
+    /**
+     * Handler for when the window is closed.
+     *
+     * @returns {undefined}
+     */
+    window.on('close', () => {
+        app.quit();
+        api.server.close();
+    });
 
-    mainWindow = window;
+    getPort({ port: 3000 }).then((port) => {
+        console.log('Listening on port:', port);
+        api.server.listen(port);
+
+        window.loadURL('file://' + __dirname + '/index.html?port=' + port);
+        menu.bind(app);
+
+        mainWindow = window;
+    });
+
     return window;
 }
 
