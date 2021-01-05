@@ -10,17 +10,19 @@
     "scripts": {
         "start": "EVENT_NOKQUEUE=1 node_modules/.bin/electron gungi/app.js",
         "clean": "rm -rf build",
-        "build": "rm -rf build && node_modules/electron-packager/cli.js . --prune --all --icon=resources/icon.icns --out=build",
-        "build:mac": "rm -rf build && node_modules/electron-packager/cli.js . --prune --platform=darwin --icon=resources/icon.icns --out=build"
+        "build": "rm -rf build && node_modules/electron-packager/bin/electron-packager.js . --prune --all --icon=resources/icon.icns --out=build",
+        "build:mac": "rm -rf build && node_modules/electron-packager/bin/electron-packager.js . --prune --platform=darwin --icon=resources/icon.icns --out=build"
     },
     "repository": {
         "type": "git",
         "url": "https://github.com/hkpeprah/node-gungi.git"
     },
     "dependencies": {
-        "electron": "1.4.15"
+        "electron": "^11.1.1",
+        "express": "^4.17.1",
+        "get-port": "^5.1.1"
     },
     "devDependencies": {
-        "electron-packager": "8.5.1"
+        "electron-packager": "^15.2.0"
     }
 }
