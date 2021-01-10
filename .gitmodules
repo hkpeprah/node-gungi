@@ -1,0 +1,3 @@
+[submodule "submodule/gungi"]
+	path = submodule/gungi
+	url = git@github.com:hkpeprah/gungi.git
