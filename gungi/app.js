@@ -8,6 +8,7 @@ const menu = require('./menu');
 const path = require('path');
 
 var mainWindow = null;
+var server = null;
 
 /**
  * Called after all windows have been closed.
@@ -17,7 +18,9 @@ var mainWindow = null;
 function unready() {
     mainWindow = null;
     app.quit();
-    api.server.close();
+    if (server !== null) {
+        server.close();
+    }
     return null;
 }
 
@@ -79,7 +82,9 @@ function ready() {
      */
     window.on('error', () => {
         app.quit();
-        api.server.close();
+        if (server !== null) {
+            server.close();
+        }
     });
 
     /**
@@ -89,12 +94,14 @@ function ready() {
      */
     window.on('close', () => {
         app.quit();
-        api.server.close();
+        if (server !== null) {
+            server.close();
+        }
     });
 
     getPort({ port: 3000 }).then((port) => {
         console.log('Listening on port:', port);
-        api.server.listen(port);
+        server = api.server.listen(port);
 
         window.loadURL('file://' + __dirname + '/index.html?port=' + port);
         menu.bind(app);

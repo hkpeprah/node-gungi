@@ -233,6 +233,69 @@ a:visited {
     text-transform: uppercase;
 }
 
+.dialog {
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 99;
+    width: 100%;
+    height: 100%;
+    display: table;
+    position: fixed;
+    background-color: rgba(34, 34, 34, 0.5);
+}
+
+.dialog .dialog-wrapper {
+    width: 100%;
+    height: auto;
+    display: table-cell;
+    vertical-align: middle;
+}
+
+.dialog .dialog-content {
+    height: auto;
+    display: table;
+    margin: 0 auto;
+    font-size: 12px;
+    min-width: 500px;
+    text-align: left;
+    position: relative;
+    border-radius: 10px;
+    box-sizing: border-box;
+    padding: 20px 20px 40px 20px;
+    box-shadow: 0 5px 5px -5px #333;
+    font-family: 'Open Sans', sans-serif;
+    background-color: rgba(254, 254, 254, 1.0);
+}
+
+.dialog .dialog-content .dialog-border {
+    width: 99%;
+    display: block;
+    margin: 15px 0px;
+    border-bottom: 1px solid #333;
+}
+
+.dialog .dialog-content h2 {
+    font-size: 18px;
+}
+
+.dialog .dialog-content label {
+    top: 10px;
+    right: 14px;
+    color: #AAA;
+    font-size: 17px;
+    cursor: pointer;
+    font-weight: 600;
+    text-align: center;
+    position: absolute;
+    font-family: 'Roboto', sans-serif;
+}
+
+.dialog .dialog-content label:hover {
+    color: #333;
+}
+
 /* GAME BOARD CSS */
 
 .game-board {

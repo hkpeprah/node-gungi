@@ -1,6 +1,7 @@
 // Copyright (C) 2020 Ford Peprah
 
 let React = window.React;
+let ReactDOM = window.ReactDOM;
 let e = React.createElement;
 
 const urlParams = new URLSearchParams(window.location.search);
@@ -210,14 +211,21 @@ class Api {
         this.ping('Hello World');
     }
 
-    drop(id, col, row, callback) {
-        this.makeRequest('drop', { id: id, col: col, row: row }, (data) => {
-            callback(data.status);
-        });
+    newGame(callback) {
+        this.makeRequest('gungi/new', {}, callback);
     }
 
-    substitute(id, srcCol, srcRow, srcTier, destCol, destRow, destTier, callback) {
-        this.makeRequest('sub', {
+    restart(gameId, callback) {
+        this.makeGameRequest(gameId, 'restart', {}, callback);
+    }
+
+    drop(gameId, id, col, row, callback, error, finish) {
+        let data = { id: id, col: col, row: row };
+        this.makeGameRequest(gameId, 'drop', data, callback, error, finish);
+    }
+
+    substitute(gameId, id, srcCol, srcRow, srcTier, destCol, destRow, destTier, callback, error, finish) {
+        let data = {
             id: id,
             src: {
                 col: srcCol,
@@ -229,13 +237,12 @@ class Api {
                 row: srcRow,
                 tier: destTier
             }
-        }, (data) => {
-            callback(data.status);
-        });
+        };
+        this.makeGameRequest(gameId, 'sub', data, callback, error, finish);
     }
 
-    immobileStrike(id, srcCol, srcRow, srcTier, destTier, callback) {
-        this.makeRequest('attack', {
+    immobileStrike(gameId, id, srcCol, srcRow, srcTier, destTier, callback, error, finish) {
+        let data = {
             id: id,
             src: {
                 col: srcCol,
@@ -247,13 +254,12 @@ class Api {
                 row: srcRow,
                 tier: destTier
             }
-        }, (data) => {
-            callback(data.status);
-        });
+        };
+        this.makeGameRequest(gameId, 'attack', data, callback, error, finish);
     }
 
-    move(id, srcCol, srcRow, srcTier, destCol, destRow, callback) {
-        this.makeRequest('move', {
+    move(gameId, id, srcCol, srcRow, srcTier, destCol, destRow, callback, error, finish) {
+        let data = {
             id: id,
             src: {
                 col: srcCol,
@@ -264,9 +270,8 @@ class Api {
                 col: destCol,
                 row: destRow
             }
-        }, (data) => {
-            callback(data.status);
-        });
+        };
+        this.makeGameRequest(gameId, 'move', data, callback, error, finish);
     }
 
     ping(message, callback) {
@@ -276,9 +281,33 @@ class Api {
         }));
     }
 
+    makeGameRequest(id, req, data, callback, error, finish) {
+        let ep = 'gungi/game/' + id + '/' + req;
+        this.makeRequest(ep, data, ((data) => {
+            if (callback) {
+                callback(data.status, data);
+            } else {
+                console.error('No callback found for:', ep);
+            }
+
+            if (!data.status) {
+                if (error) {
+                    console.error('Error', data);
+                    error(data.error);
+                } else {
+                    console.error('Unhandled error in API response:', data);
+                }
+            }
+
+            if (data.result.over) {
+                finish(data.result.draw, data.result.winner);
+            }
+        }).bind(this));
+    }
+
     makeRequest(endpoint, data, callback) {
         let url = this.baseUrl + '/' + endpoint;
-        console.debug('--> Request:', data);
+        console.debug('--> Request:', endpoint, data);
         fetch(url, {
             method: 'POST',
             headers: {
@@ -297,8 +326,6 @@ class Api {
             if (data) {
                 callback(data);
             }
-        }).catch((error) => {
-            console.error('--> Error:', error);
         });
     }
 }
@@ -376,7 +403,7 @@ class Cell extends React.Component {
 
     onDrop(event) {
         let ref = this.cellRef.current;
-        console.debug('<-- Drop Stop (Empty)');
+        console.debug(`<-- Drop Stop @ (${this.row}, ${this.col}) (Empty)`);
         this.props.onPieceDropped(event, ref, this.row, this.col);
     }
 
@@ -476,11 +503,11 @@ class Piece extends React.Component {
         super(props);
 
         this.state = {
-            parent: this.props.parent,
+            parent: null,
             draggable: this.props.draggable,
             side: this.props.piece.front,
             tower: null,
-            stack: this.props.stack,
+            stack: null,
             hovered: false,
             dragging: false,
             player: this.props.player
@@ -489,21 +516,33 @@ class Piece extends React.Component {
         this.onMoved = this.onMoved.bind(this);
         this.resizeTimeout = null;
         this.pieceRef = React.createRef();
-        this.state.stack.push(this);
 
         window.addEventListener('resize', this.onResize.bind(this));
     }
 
     componentDidMount() {
         let tower = this.state && this.state.tower ? this.state.tower : null;
-        let position = this.calculatePosition(this.props.parent, tower);
+        let position = null;
+
         this.props.onReady(this);
+
+        if (!this.state.parent) {
+            return;
+        }
+
+        position = this.calculatePosition(this.state.parent, tower);
         this.setState({ top: position.top, left: position.left });
     }
 
-    calculatePosition(parent, tower) {
+    componentDidUpdate() {
+    }
+
+    calculatePosition(parent, tower, stack) {
         let offset = getCumulativeOffset(parent);
         let newOffset = null;
+
+        stack = stack ? stack : this.state.stack;
+
         if (tower) {
             // Placement in a tower.  Need to determine our index.
             let xDiff = null;
@@ -536,11 +575,11 @@ class Piece extends React.Component {
             // placement of the pawns, but it can work up to three of anything
             // really.
             let diffBefore = 0;
-            let first = this.state.stack[0];
+            let first = stack[0];
             let top = offset.top + (parent.clientHeight / 2);
             let left = offset.left + (parent.clientWidth / 2);
-            for (let i = 0; i < this.state.stack.length; i++) {
-                let next = this.state.stack[i];
+            for (let i = 0; i < stack.length; i++) {
+                let next = stack[i];
                 if (!next.equals(first)) {
                     diffBefore += 1;
                     first = next;
@@ -578,15 +617,12 @@ class Piece extends React.Component {
 
         tower.remove(this);
         tower.getChildren().forEach((p) => {
-            p.setTower(tower);
             p.onParentChanged(p.getParent(), tower);
         });
 
         stack.push(this);
 
-        // TODO: FLIP THIS PIECE
-
-        this.setState({ tower: null, stack: stack, player: newPlayer });
+        this.setState({ tower: null, stack: stack, player: newPlayer, side: this.getFlipSide() });
         this.onParentChanged(parent, null);
     }
 
@@ -674,14 +710,35 @@ class Piece extends React.Component {
         return this.hasEffect('Tier Exchange');
     }
 
+    setParent(parent) {
+        this.setState({ parent: parent });
+    }
+
+    setStack(stack) {
+        let tower = this.state.tower;
+
+        if (tower !== null) {
+            tower.remove(this);
+            tower.getChildren().forEach((p) => {
+                p.onParentChanged(p.getParent(), tower);
+            });
+        }
+
+        this.setState({ tower: null, stack: stack });
+    }
+
     setTower(tower) {
         let index = null;
+
         if (this.state.stack !== null) {
             index = this.state.stack.indexOf(this);
             if (index > -1) {
                 this.state.stack.splice(index, 1);
             }
         }
+
+        tower.insert(this);
+
         this.setState({ tower: tower, stack: null });
     }
 
@@ -708,6 +765,7 @@ class Piece extends React.Component {
             event.preventDefault();
             return null;
         }
+        console.debug(`<-- Drop Stop @(${tower.getRow()}, ${tower.getCol()}) (${this.getId()})`);
         this.props.onPieceDropped(event, ref, tower.getRow(), tower.getCol());
     }
 
@@ -758,8 +816,8 @@ class Piece extends React.Component {
         this.setState({ hovered: true });
     }
 
-    onParentChanged(parent, tower) {
-        let offset = this.calculatePosition(parent, tower);
+    onParentChanged(parent, tower, stack) {
+        let offset = this.calculatePosition(parent, tower, stack);
         let zIndex = offset.zIndex !== null ? offset.zIndex : 0;
         this.setState({ top: offset.top, left: offset.left, parent: parent, zIndex: zIndex });
     }
@@ -770,13 +828,11 @@ class Piece extends React.Component {
         if (tower !== null) {
             tower.remove(this);
             tower.getChildren().forEach((p) => {
-                p.setTower(tower);
                 p.onParentChanged(p.getParent(), tower);
             });
         }
 
         tower = grid[row][col];
-        tower.insert(this);
 
         this.setTower(tower);
         this.onParentChanged(parent, tower);
@@ -794,10 +850,18 @@ class Piece extends React.Component {
     }
 
     render() {
-        let stack = this.state.stack ?
-            this.state.stack : this.state.tower.getChildren();
+        let stack = this.state.stack;
         let tooltip = null;
-        let attrs = {
+        let attrs = null;
+
+        if (stack === null) {
+            if (this.state.tower === null) {
+                return null;
+            }
+            stack = this.state.tower.getChildren();
+        }
+
+        attrs = {
             className: 'piece ' + this.state.player,
             'data-colour': this.state.player,
             'data-name': this.state.side.name,
@@ -1013,6 +1077,10 @@ class Credits extends React.Component {
             ));
         };
 
+        if (!this.props.visible) {
+            return null;
+        }
+
         addCredit('Developed by', 'Ford Peprah');
         addCredit('Copyright', '&copy; Ford Peprah 2020');
 
@@ -1030,6 +1098,48 @@ class Credits extends React.Component {
     }
 }
 
+class ErrorWindow extends React.Component {
+    constructor(props) {
+        super(props);
+        this.timeout = null;
+    }
+
+    componentDidUpdate() {
+        if (this.props.message) {
+            this.timeout = setTimeout(this.onClick.bind(this), 1500 /* 1.5 seconds */);
+        }
+    }
+
+    onClick() {
+        if (this.timeout) {
+            clearTimeout(this.timeout);
+        }
+        this.props.onClick();
+    }
+
+    render() {
+        if (!this.props.message) {
+            return null;
+        }
+
+        return e('div', { className: 'dialog', onClick: this.onClick.bind(this) },
+            e('div', { className: 'dialog-wrapper' },
+                e('div', { className: 'dialog-content' },
+                    e('label', {
+                        className: 'dialog-close',
+                        dangerouslySetInnerHTML: {
+                            __html: '&#x2715;'
+                        }
+                    }),
+                    e('h2', {}, 'Error'),
+                    e('span', { className: 'dialog-border' }),
+                    e('span', {}, this.props.message)
+                )
+            )
+        );
+    }
+}
+
 class App extends React.Component {
     constructor(props) {
         super(props);
@@ -1038,9 +1148,11 @@ class App extends React.Component {
             paused: false,
             start: true,
             credits: false,
-            turn: 'black',
             piecesBlack: [],
-            piecesWhite: []
+            piecesWhite: [],
+            turn: 'black',
+            gameId: null,
+            error: null
         };
         this.pieces = [];
         this.currentPiece = null;
@@ -1050,6 +1162,9 @@ class App extends React.Component {
         this.blackRef = null;
         this.whiteRef = null;
         this.api = new Api();
+        this.api.newGame(((data) => {
+            this.setState({ gameId: data.id });
+        }).bind(this));
     }
 
     componentDidMount() {
@@ -1068,6 +1183,7 @@ class App extends React.Component {
         let ref = piece.getPlayer() === 'white' ?
             this.blackRef : this.whiteRef;
         let data = piece.getData();
+        console.debug(`--> ${piece.getName()} captured`)
         piece.onCaptured(ref.children[data.row], this.hand[piece.getPlayer()][data.row]);
     }
 
@@ -1086,14 +1202,25 @@ class App extends React.Component {
     }
 
     onCredits(state) {
-        console.debug('--> Credits');
+        if (state) {
+            console.debug('--> Credits');
+        } else {
+            console.debug('<-- Credits');
+        }
         this.setState({ credits: state });
+    }
+
+    onErrorDismissed() {
+        console.debug('--> Error');
+        this.setState({ error: null });
     }
 
     onStart() {
         let grid = null;
         let hand = null;
         let maxRow = null;
+        let piecesWhite = [];
+        let piecesBlack = [];
         if (this.state.paused) {
             return this.setState({ paused: false });
         }
@@ -1111,8 +1238,19 @@ class App extends React.Component {
 
         for (var row = 0; row < 9; row++) {
             grid.push([]);
+        }
+
+        for (var row = 8; row >= 0; row--) {
             for (var col = 0; col < 9; col++) {
                 grid[row].push(new Tower(row, col));
+            }
+        }
+
+        for (let i = 0; i < gungiPieces.length; i++) {
+            let piece = gungiPieces[i];
+            for (let j = 0; j < piece.count; j++) {
+                piecesBlack.push({ id: piecesBlack.length, piece: piece, player: 'black' });
+                piecesWhite.push({ id: piecesWhite.length, piece: piece, player: 'white' });
             }
         }
 
@@ -1122,12 +1260,32 @@ class App extends React.Component {
         this.pieces = [];
         this.blackRef = null;
         this.whiteRef = null;
+
+        this.onError = this.onError.bind(this);
+        this.onFinish = this.onFinish.bind(this);
+
+        this.api.restart(this.state.gameId, ((piecesWhite, piecesBlack) => {
+            return ((data) => {
+                this.setState({
+                    ingame: true,
+                    paused: false,
+                    start: true,
+                    turn: 'black',
+                    piecesWhite: piecesWhite,
+                    piecesBlack: piecesBlack
+                });
+            }).bind(this);
+        }).bind(this)(piecesWhite, piecesBlack));
+    }
+
+    onError(error) {
         this.setState({
-            ingame: true,
-            paused: false,
-            start: true,
-            turn: 'black'
+            error: error.string
         });
+    }
+
+    onFinish(draw, winner) {
+        console.log('Game Over', 'Draw', draw, 'Winner', winner);
     }
 
     onQuit() {
@@ -1136,8 +1294,8 @@ class App extends React.Component {
             this.setState({
                 ingame: false,
                 paused: false,
-                piecesBlack: [],
-                piecesWhite: []
+                piecesWhite: [],
+                piecesBlack: []
             });
         } else {
             window.close();
@@ -1145,24 +1303,9 @@ class App extends React.Component {
     }
 
     onPlayerReady(player, ref) {
-        let pieces = [];
-        for (let i = 0; i < gungiPieces.length; i++) {
-            let piece = gungiPieces[i];
-            for (let j = 0; j < piece.count; j++) {
-                pieces.push({
-                    id: pieces.length,
-                    piece: piece,
-                    player: player,
-                    parent: ref.children[piece.row]
-                });
-            }
-        }
-
         if (player === 'black') {
-            this.setState({ piecesBlack: pieces });
             this.blackRef = ref;
         } else {
-            this.setState({ piecesWhite: pieces });
             this.whiteRef = ref;
         }
     }
@@ -1177,16 +1320,48 @@ class App extends React.Component {
             return;
         }
 
-        this.api.immobileStrike(piece.getId(), col, row, tier, targetTier, ((row, col, tier) => {
+        this.api.immobileStrike(this.state.gameId, piece.getId(), col, row, tier, targetTier, ((row, col, tier) => {
             return ((status) => {
                 // Immobile strike succeeded, so capture piece.
                 return this.onImmobileStrikeCallback(status, row, col, tier);
             }).bind(this);
-        }).bind(this)(row, col, targetTier));
+        }).bind(this)(row, col, targetTier), this.onError, this.onFinish);
     }
 
     onPieceAdded(piece) {
-        this.pieces.push(piece);
+        let stack = null;
+        let row = null;
+        let player = null;
+
+        if (this.pieces.length < 46) {
+            this.pieces.push(piece);
+
+            player = piece.getPlayer();
+            row = piece.getData().row;
+
+            stack = this.hand[player][row];
+            stack.push(piece);
+
+            if (this.pieces.length != 46) {
+                return;
+            }
+        } else {
+            return;
+        }
+
+        this.pieces.forEach(((piece) => {
+            player = piece.getPlayer();
+            row = piece.getData().row;
+
+            stack = this.hand[player][row];
+            piece.setStack(stack);
+
+            if (player == 'black') {
+                piece.onParentChanged(this.blackRef.children[row], null, stack);
+            } else {
+                piece.onParentChanged(this.whiteRef.children[row], null, stack);
+            }
+        }).bind(this));
     }
 
     onPieceClicked(piece) {
@@ -1213,7 +1388,7 @@ class App extends React.Component {
             let row = tower.getRow();
             let srcTier = tower.getIndex(source);
             let destTier = tower.getIndex(piece);
-            this.api.substitute(source.getId(), col, row, srcTier, col, row, destTier, ((source, piece) => {
+            this.api.substitute(this.state.gameId, source.getId(), col, row, srcTier, col, row, destTier, ((source, piece) => {
                 return ((status) => {
                     return this.onSubCallback(status, source, piece);
                 }).bind(this);
@@ -1232,7 +1407,7 @@ class App extends React.Component {
             let destRow = destTower.getRow();
             let destTier = destTower.getIndex(piece);
             this.api.substitute(
-                source.getId(), srcCol, srcRow, srcTier, destCol, destRow, destTier,
+                this.state.gameId, source.getId(), srcCol, srcRow, srcTier, destCol, destRow, destTier,
                 ((source, piece) => {
                     return ((status) => {
                         return this.onSubCallback(status, source, piece);
@@ -1271,7 +1446,7 @@ class App extends React.Component {
         //   5. Betrayal
         //   6. Forced Re-arrangement
         if (piece.getTower() === null) {
-            this.api.drop(piece.getId(), col, row, callback);
+            this.api.drop(this.state.gameId, piece.getId(), col, row, callback, this.onError, this.onFinish);
         } else {
             // Either this is a move, or an attack.  We need to make that
             // distinction here by prompting the user with a pop-up.  If they
@@ -1281,7 +1456,7 @@ class App extends React.Component {
             let curTower = piece.getTower();
             if (!newTower.getSize()) {
                 // New tower is empty, so just move there.
-                this.api.move(piece.getId(), curTower.getCol(), curTower.getRow(), 0, col, row, callback);
+                this.api.move(this.state.gameId, piece.getId(), curTower.getCol(), curTower.getRow(), 0, col, row, callback, this.onError, this.onFinish);
             } else {
                 // New tower is not empty, so we need to check whether this is a
                 // mobile strike, or an immobile strike.  A mobile strike occurs
@@ -1298,12 +1473,12 @@ class App extends React.Component {
                     let target = null;
                     if (newTower.getChild(newTower.getSize() - 1).getPlayer() == piece.getPlayer()) {
                         // This is a move.
-                        this.api.move(piece.getId(), curTower.getCol(), curTower.getRow(), 0, col, row, callback);
+                        this.api.move(this.state.gameId, piece.getId(), curTower.getCol(), curTower.getRow(), 0, col, row, callback, this.onError, this.onFinish);
                     } else {
                         // Prompt for a mobile strike or move.
                         // TODO: Currently, we always treat a move as mobile strike, so we do not need
                         // to handle this specially, for now.
-                        this.api.move(piece.getId(), curTower.getCol(), curTower.getRow(), 0, col, row, callback);
+                        this.api.move(this.state.gameId, piece.getId(), curTower.getCol(), curTower.getRow(), 0, col, row, callback, this.onError, this.onFinish);
                     }
                 }
             }
@@ -1341,7 +1516,7 @@ class App extends React.Component {
         }
 
         // If the move was successful, then trigger the indication as such.
-        console.debug('--> ' + piece.getName() + ' moved to (' + row + ', ' + col + ')');
+        console.debug(`--> ${piece.getName()} moved to (${row}, ${col})`);
         piece.onMoved(row, col, this.grid, ref);
         this.onTurnChanged();
     }
@@ -1407,21 +1582,11 @@ class App extends React.Component {
             onQuit: this.onQuit.bind(this)
         }));
 
-        if (this.state.credits) {
-            children.push(e(Credits, {
-                onClick: ((ev) => {
-                    this.onCredits(false);
-                }).bind(this)
-            }));
-        }
-
         pieces.forEach(((piece, idx) => {
             children.push(e(Piece, {
                 id: piece.id,
                 piece: piece.piece,
                 player: piece.player,
-                parent: piece.parent,
-                stack: this.hand[piece.player][piece.piece.row],
                 canMove: this.canMove.bind(this),
                 onImmobileStrike: this.onImmobileStrike.bind(this),
                 onReady: this.onPieceAdded.bind(this),
@@ -1430,6 +1595,20 @@ class App extends React.Component {
                 onPieceDragged: this.onPieceDragged.bind(this)
             }));
         }).bind(this));
+
+        children.push(e(Credits, {
+            visible: this.state.credits,
+            onClick: ((ev) => {
+                this.onCredits(false);
+            }).bind(this)
+        }));
+
+        children.push(e(ErrorWindow, {
+            message: this.state.error,
+            onClick: ((ev) => {
+                this.onErrorDismissed();
+            }).bind(this)
+        }));
 
         return e('div', {
             className: 'app' + (this.state.ingame ? '' : ' full'),
@@ -1459,7 +1638,6 @@ function toTitleCase(str) {
 }
 
 document.addEventListener('DOMContentLoaded', function(ev) {
-    let ReactDOM = window.ReactDOM;
     let app = React.createElement(App);
     ReactDOM.render(app, document.getElementById('app-container'));
 });
